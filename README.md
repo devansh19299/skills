@@ -9,7 +9,7 @@ Starts any development task using a structured RFC → TODO → Approval → TDD
 ### Install in any container or machine
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/devansh19299/claude-skills/main/dev/bootstrap_dev_skill.sh | bash
+curl -fsSL https://raw.githubusercontent.com/devansh19299/skills/main/dev/bootstrap_dev_skill.sh | bash
 ```
 
 ### Set up corpus in a project
