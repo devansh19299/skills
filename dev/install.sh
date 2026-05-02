@@ -22,8 +22,10 @@ mkdir -p "$SKILL_DIR"
 cp "$SCRIPT_DIR/SKILL.md"             "$SKILL_DIR/SKILL.md"
 cp "$SCRIPT_DIR/generate_corpus.py"   "$SKILL_DIR/generate_corpus.py"
 cp "$SCRIPT_DIR/search_corpus.py"     "$SKILL_DIR/search_corpus.py"
+cp "$SCRIPT_DIR/corpus_server.py"     "$SKILL_DIR/corpus_server.py"
 cp "$SCRIPT_DIR/install.sh"           "$SKILL_DIR/install.sh"
 echo "  [ok] Skill installed at $SKILL_DIR"
+pip install fastmcp -q 2>/dev/null && echo "  [ok] fastmcp installed" || echo "  [warn] fastmcp install failed — MCP server won't work"
 
 if $GLOBAL_ONLY; then
   echo ""
@@ -92,6 +94,25 @@ else
   echo "  [skip] .claude/settings.json already exists — add hook manually if needed"
 fi
 
+# 6. Create .mcp.json for MCP corpus server
+if [ ! -f .mcp.json ]; then
+  cat > .mcp.json << JSON
+{
+  "mcpServers": {
+    "corpus": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["$(pwd)/corpus_server.py"]
+    }
+  }
+}
+JSON
+  echo "  [ok] .mcp.json created — corpus MCP server registered"
+else
+  echo "  [skip] .mcp.json already exists"
+fi
+
 echo ""
 echo "=== All done ==="
 echo "  /dev skill is ready. Type /dev <task description> to start."
+echo "  MCP server: python3 corpus_server.py --http  (for Gemini/Codex HTTP access on :7070)"

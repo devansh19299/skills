@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "corpus": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["/workspace/development/corpus_server.py"]
+    }
+  }
+}
