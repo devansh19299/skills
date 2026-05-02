@@ -152,6 +152,49 @@ def format_record(r: dict) -> str:
     return "\n".join(lines)
 
 
+# ── Skills / prompts library ─────────────────────────────────────────────────
+
+SKILLS_DIRS = [
+    Path.home() / ".claude" / "skills",
+    Path(".claude") / "skills",
+]
+
+def load_skills() -> dict[str, dict]:
+    """Return all skills keyed by name: {name, description, content, path}"""
+    skills = {}
+    for base in SKILLS_DIRS:
+        if not base.exists():
+            continue
+        for skill_dir in sorted(base.iterdir()):
+            skill_md = skill_dir / "SKILL.md"
+            if not skill_md.exists():
+                continue
+            raw = skill_md.read_text(errors="ignore")
+            # Parse frontmatter
+            description, name = "", skill_dir.name
+            if raw.startswith("---"):
+                end = raw.find("---", 3)
+                if end != -1:
+                    fm = raw[3:end]
+                    for line in fm.splitlines():
+                        if line.startswith("description:"):
+                            description = line.split(":", 1)[1].strip()
+                        if line.startswith("name:"):
+                            name = line.split(":", 1)[1].strip()
+                    content = raw[end+3:].strip()
+                else:
+                    content = raw
+            else:
+                content = raw
+            skills[name] = {
+                "name": name,
+                "description": description,
+                "content": content,
+                "path": str(skill_md),
+            }
+    return skills
+
+
 # ── Project info ──────────────────────────────────────────────────────────────
 
 def get_project_info() -> dict:
@@ -229,6 +272,23 @@ def run_mcp():
         info = get_project_info()
         return json.dumps(info, indent=2)
 
+    @mcp.tool()
+    def list_prompts() -> str:
+        """List all available skills/prompts with their descriptions."""
+        skills = load_skills()
+        lines = [f"/{name} — {s['description']}" for name, s in sorted(skills.items())]
+        return f"{len(lines)} skills available:\n" + "\n".join(lines)
+
+    @mcp.tool()
+    def get_prompt(skill_name: str) -> str:
+        """Get the full instructions for a skill to use in any AI tool. skill_name e.g. 'debug', 'bank-api'."""
+        skills = load_skills()
+        skill = skills.get(skill_name)
+        if not skill:
+            available = ", ".join(sorted(skills.keys()))
+            return f"Skill '{skill_name}' not found. Available: {available}"
+        return f"# /{skill['name']}\n{skill['description']}\n\n{skill['content']}"
+
     mcp.run()
 
 
@@ -279,12 +339,41 @@ def run_http(port: int = 7070):
             elif parsed.path == "/project_info":
                 self._json(get_project_info())
 
+            elif parsed.path == "/prompts":
+                skills = load_skills()
+                name = qs.get("name", [""])[0]
+                if name:
+                    skill = skills.get(name)
+                    if skill:
+                        # Return as plain text for easy copy-paste into any AI
+                        body = f"# /{skill['name']}\n{skill['description']}\n\n{skill['content']}".encode()
+                        self.send_response(200)
+                        self.send_header("Content-Type", "text/plain; charset=utf-8")
+                        self.send_header("Content-Length", len(body))
+                        self.end_headers()
+                        self.wfile.write(body)
+                    else:
+                        self._json({"error": f"Skill '{name}' not found",
+                                    "available": sorted(skills.keys())}, 404)
+                else:
+                    self._json({
+                        "skills": [
+                            {"name": s["name"], "description": s["description"]}
+                            for s in sorted(skills.values(), key=lambda x: x["name"])
+                        ],
+                        "usage": "GET /prompts?name=<skill> to get full instructions"
+                    })
+
             else:
                 self._json({
-                    "endpoints": ["/search?q=&top=20&app=&type=",
-                                  "/hot_file?path=",
-                                  "/doctypes?app=",
-                                  "/project_info"]
+                    "endpoints": [
+                        "/search?q=&top=20&app=&type=",
+                        "/hot_file?path=",
+                        "/doctypes?app=",
+                        "/project_info",
+                        "/prompts",
+                        "/prompts?name=<skill-name>",
+                    ]
                 })
 
     print(f"Corpus HTTP server running on http://localhost:{port}", flush=True)
