@@ -47,9 +47,11 @@ The `corpus` MCP server is always running. Use it to find DocTypes, APIs, and co
 
 **verification-before-completion**: Never say "done", "fixed", or "complete" without running the verify command and showing the actual output. For Frappe: run `bench run-tests --app <app> --doctype "<DocType>"` and paste results. No exceptions.
 
-**50-line limit per bugfix**: A single fix must touch fewer than 50 lines. If more are needed, stop and discuss scope with the user first.
+**50-line limit per bugfix**: A single fix must touch fewer than 50 lines. If more are needed, stop and discuss scope first.
 
-**Subagents for file search**: Never grep or find files in the main session. Spawn an Explore subagent for file-digging — it burns its own context and returns a summary. Keep the main window clean.
+**Subagents for file search**: Never grep or find files in the main session. Spawn an Explore subagent — it burns its own context and returns a summary. Keep the main window clean.
+
+**Model routing**: Use Sonnet subagents by default. Only escalate to Opus for complex architectural decisions or multi-file refactors. Add "use Sonnet subagents" to any task involving file search or analysis.
 
 **One fix per commit**: Each commit addresses exactly one thing. Atomic history, easy rollback.
 

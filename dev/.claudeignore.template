@@ -1,0 +1,54 @@
+# Database dumps — never read these
+*.sql
+*.sql.gz
+*.dump
+
+# Logs — use tail -f instead
+logs/
+*.log
+*.log.*
+
+# Binary / media
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.ico
+*.bin
+*.xlsx
+*.xls
+*.docx
+*.doc
+*.pdf
+*.zip
+*.tar.gz
+*.gz
+
+# Node / Python build artifacts
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+.eggs/
+*.egg-info/
+
+# Frappe build artifacts
+canopi-bench/node_modules/
+canopi-bench/apps/frappe/public/build.json
+canopi-bench/apps/*/public/dist/
+
+# Postman / test collections (large JSON, use corpus hot_file instead)
+*.postman_collection.json
+*.postman_environment.json
+
+# IDE
+.vscode/
+.idea/
+
+# Misc large files
+*.srt
+*.tsv
+*.vtt
+*.csv
+Annual_Fee_Scheduler_Queue*.xlsx
+Trial_Balance*.xlsx
