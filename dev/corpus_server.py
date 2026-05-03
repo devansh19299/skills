@@ -339,6 +339,19 @@ def run_http(port: int = 7070):
             elif parsed.path == "/project_info":
                 self._json(get_project_info())
 
+            elif parsed.path == "/system-prompt":
+                # Returns the universal system prompt for Codex/Antigravity/Gemini
+                sp_path = Path(__file__).parent / "system_prompt_universal.md"
+                if sp_path.exists():
+                    body = sp_path.read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain; charset=utf-8")
+                    self.send_header("Content-Length", len(body))
+                    self.end_headers()
+                    self.wfile.write(body)
+                else:
+                    self._json({"error": "system_prompt_universal.md not found"}, 404)
+
             elif parsed.path == "/prompts":
                 skills = load_skills()
                 name = qs.get("name", [""])[0]
@@ -367,6 +380,7 @@ def run_http(port: int = 7070):
             else:
                 self._json({
                     "endpoints": [
+                        "/system-prompt          ← paste this into Codex/Antigravity/Gemini system prompt",
                         "/search?q=&top=20&app=&type=",
                         "/hot_file?path=",
                         "/doctypes?app=",
