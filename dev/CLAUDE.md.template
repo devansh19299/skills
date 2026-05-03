@@ -1,0 +1,80 @@
+# Project Context
+
+## Environment
+- **Bench path**: `/workspace/development/canopi-bench`
+- **Custom apps**: `p2p_escrow`, `p2p_admin`, `trusteeship_platform`, `aarvi`, `frappe_utils`, `arhamlabs_erpnext`
+- **Sites**: check `canopi-bench/sites/` for active site names
+- **Python env**: `/workspace/development/canopi-bench/env/bin/python`
+
+## Commands
+```bash
+# Run tests
+bench run-tests --app <app> --doctype "<DocType>"
+
+# Migrate after schema changes
+bench --site <site> migrate
+
+# Console
+bench --site <site> console
+
+# Logs
+tail -f logs/frappe.log
+tail -f logs/worker.log
+```
+
+## Corpus Search (MCP tool — use instead of reading files directly)
+The `corpus` MCP server is always running. Use it to find DocTypes, APIs, and controllers:
+- Tool: `search_corpus(query, top=20, app="", record_type="")`
+- Tool: `get_hot_file(path)` — for frequently-used files
+- Tool: `list_doctypes(app="")` — list all DocTypes
+- Tool: `project_info()` — bench/site/app details
+- Tool: `list_prompts()` — list all available skills/workflows
+- Tool: `get_prompt(skill_name)` — get full workflow instructions for a skill
+
+**Never re-read hot files directly** — they are embedded in the corpus:
+- `apps/p2p_escrow/p2p_escrow/bank_adapter.py`
+- `apps/p2p_escrow/p2p_escrow/api.py`
+- `apps/trusteeship_platform/trusteeship_platform/trusteeship_platform/doctype/annual_fee_scheduler_queue/annual_fee_scheduler_queue.py`
+
+## Coding Conventions
+- **Commits**: Conventional Commits (`feat:`, `fix:`, `chore:`) — must pass `gitlint`
+- **Tests**: always write failing test first, then implement
+- **Absolute paths**: always use full paths in TODOs and file references
+- **No broad try/except**: handle specific exceptions only
+- **Maker-Checker**: use `send_for_approval()` / `approve()` / `reject()` pattern
+
+## Workflow (4-phase)
+1. **RFC** — discuss only, search corpus first, no code
+2. **TODO** — TDD-first, absolute paths, implementation blocks
+3. **Approval** — wait for human go-ahead
+4. **Execute** — scaffold → failing test → implement → commit
+
+## Skills — Auto-selection Guide
+
+Pick the right skill based on what the user describes:
+
+| User says | Use skill | How |
+|---|---|---|
+| error / traceback / not working | `debug` | `get_prompt("debug")` |
+| add bank API / payout / HDFC / ICICI / Axis | `bank-api` | `get_prompt("bank-api")` + `search_corpus(query)` |
+| create new DocType | `doctype` | `get_prompt("doctype")` + `search_corpus(query)` |
+| add approve / reject / maker / checker | `approval` | `get_prompt("approval")` + `search_corpus(query)` |
+| tests failing / run tests | `test` | `get_prompt("test")` |
+| FSD / BRD / API spec doc | `read-spec` | `get_prompt("read-spec")` |
+| any other dev task | `dev` | `get_prompt("dev")` + `search_corpus(query)` |
+
+**For Claude Code**: skills are auto-invoked — no manual step needed.
+**For other AI tools with MCP**: call `get_prompt(<skill>)` then `search_corpus(<task>)` before starting.
+**For other AI tools without MCP**: `curl localhost:7070/prompts?name=<skill>` and `curl "localhost:7070/search?q=<task>"` then paste output into chat.
+
+## HTTP API (for non-MCP tools: Gemini, etc.)
+Start once: `python3 /workspace/development/corpus_server.py --http`
+
+| Endpoint | Returns |
+|---|---|
+| `localhost:7070/search?q=<query>` | Relevant DocTypes, APIs, controllers |
+| `localhost:7070/prompts` | List of all skills |
+| `localhost:7070/prompts?name=<skill>` | Full skill instructions (plain text) |
+| `localhost:7070/project_info` | Bench path, apps, sites |
+| `localhost:7070/doctypes?app=<app>` | All DocTypes in an app |
+| `localhost:7070/hot_file?path=<path>` | Frequently-used file content |
