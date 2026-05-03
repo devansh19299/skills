@@ -1,5 +1,12 @@
 # Project Context
 
+## Session State (read this first)
+If `SESSION.md` exists in the current directory, read it before anything else.
+It contains what was done last session, what's in progress, what's blocked, and what to do next.
+Do not ask the user to re-explain — use SESSION.md as the starting point.
+Run `/handoff` at the end of every session to update it.
+
+
 ## Environment
 - **Bench path**: `/workspace/development/canopi-bench`
 - **Custom apps**: `p2p_escrow`, `p2p_admin`, `trusteeship_platform`, `aarvi`, `frappe_utils`, `arhamlabs_erpnext`
