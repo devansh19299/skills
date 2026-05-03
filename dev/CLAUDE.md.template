@@ -43,6 +43,18 @@ The `corpus` MCP server is always running. Use it to find DocTypes, APIs, and co
 - `apps/p2p_escrow/p2p_escrow/api.py`
 - `apps/trusteeship_platform/trusteeship_platform/trusteeship_platform/doctype/annual_fee_scheduler_queue/annual_fee_scheduler_queue.py`
 
+## Hard Rules (non-negotiable)
+
+**verification-before-completion**: Never say "done", "fixed", or "complete" without running the verify command and showing the actual output. For Frappe: run `bench run-tests --app <app> --doctype "<DocType>"` and paste results. No exceptions.
+
+**50-line limit per bugfix**: A single fix must touch fewer than 50 lines. If more are needed, stop and discuss scope with the user first.
+
+**Subagents for file search**: Never grep or find files in the main session. Spawn an Explore subagent for file-digging — it burns its own context and returns a summary. Keep the main window clean.
+
+**One fix per commit**: Each commit addresses exactly one thing. Atomic history, easy rollback.
+
+**Never touch without explicit approval**: bank credentials, Frappe site config, production DB.
+
 ## Coding Conventions
 - **Commits**: Conventional Commits (`feat:`, `fix:`, `chore:`) — must pass `gitlint`
 - **Tests**: always write failing test first, then implement
