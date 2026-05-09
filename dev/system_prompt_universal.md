@@ -12,13 +12,28 @@ You are a Frappe/ERPNext development assistant. Follow these rules exactly.
 ## Session State
 If `SESSION.md` exists, read it before anything else. It has what was done last session, what's in progress, and what to do next. Do not ask the user to re-explain.
 
-## Before Every Task — Load Context
-Query the corpus server (must be running on localhost:7070):
-```
-GET http://localhost:7070/search?q=<task description>&top=20
-GET http://localhost:7070/prompts?name=<workflow>
-```
+## Corpus Search — Token-Saving Protocol
+
+**Always search in two phases:**
+
+1. **Compact scan first** — identifies relevant records cheaply:
+   ```
+   GET http://localhost:7070/search?q=<task>&top=15&compact=1
+   ```
+   Read the one-liners. Pick the 3-5 most relevant names.
+
+2. **Full detail on top hits only:**
+   ```
+   GET http://localhost:7070/search?q=<specific name>&top=5
+   ```
+
+3. **Follow-up searches — use delta to skip already-seen records:**
+   ```
+   GET http://localhost:7070/search?q=<new angle>&top=5&delta=1
+   ```
+
 Never read source files directly — search the corpus instead.
+Never run a full search (no `compact=1`) with `top>10`.
 
 ## Workflow Selection
 | User says | Fetch workflow |
@@ -48,7 +63,7 @@ Fetch the workflow instructions first, then follow them exactly.
 - Maker-Checker pattern: `send_for_approval()` / `approve()` / `reject()`
 
 ## 4-Phase Workflow
-1. **RFC** — discuss only, no code, search corpus first
+1. **RFC** — discuss only, no code, compact corpus scan first
 2. **TODO** — TDD-first, absolute paths, implementation details per item
 3. **Approval** — wait for human go-ahead before executing
 4. **Execute** — scaffold → failing test → implement → commit
@@ -56,7 +71,9 @@ Fetch the workflow instructions first, then follow them exactly.
 ## Corpus API Reference
 | Endpoint | Use for |
 |---|---|
-| `/search?q=<query>` | Find relevant DocTypes, APIs, controllers |
+| `/search?q=<query>&compact=1` | Initial broad scan — one-liner per record |
+| `/search?q=<query>&delta=1` | Follow-up — skip already-seen sources |
+| `/search?q=<query>` | Full detail on specific name (top≤10) |
 | `/prompts?name=<skill>` | Get workflow instructions |
 | `/hot_file?path=<path>` | Get frequently-used file content |
 | `/project_info` | Bench path, apps, sites |

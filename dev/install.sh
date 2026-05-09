@@ -72,8 +72,16 @@ echo "  [ok] PostToolUse hook installed at .claude/hooks/refresh_corpus.sh"
 
 # 5. Create .claude/settings.json if it doesn't exist
 if [ ! -f .claude/settings.json ]; then
+  # skillListingBudgetFraction: 0.06 — prevents skill descriptions being truncated
+  #   (Claude Code default 1% cuts off skills when many SKILL.md files exist)
+  # CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: 50 — makes built-in micro-compaction activate
+  #   at ~45% context instead of ~80%, keeping context lean automatically
   cat > .claude/settings.json << 'JSON'
 {
+  "skillListingBudgetFraction": 0.06,
+  "env": {
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50"
+  },
   "hooks": {
     "PostToolUse": [
       {
@@ -85,11 +93,22 @@ if [ ! -f .claude/settings.json ]; then
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/skills/dev/context_watch.py --hook",
+            "timeout": 3000
+          }
+        ]
+      }
     ]
   }
 }
 JSON
-  echo "  [ok] .claude/settings.json created"
+  echo "  [ok] .claude/settings.json created (with auto-compaction + context watch)"
 else
   echo "  [skip] .claude/settings.json already exists — add hook manually if needed"
 fi

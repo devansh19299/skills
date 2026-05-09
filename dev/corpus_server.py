@@ -13,6 +13,11 @@ Usage (HTTP — Gemini / curl / other):
 
 Usage (test):
     python3 corpus_server.py --test
+
+Token-saving features:
+    search_corpus_compact   — one-liner per record (~70% fewer tokens)
+    search_corpus_delta     — skips sources already returned this session (deduplication)
+    reset_session_cache     — clear the dedup set
 """
 
 import json
@@ -50,6 +55,10 @@ STOP_WORDS = {
 }
 
 _corpus_cache: list[dict] | None = None
+
+# Session-level deduplication: tracks source paths already returned this session.
+# Prevents re-sending the same context in follow-up searches (saves tokens).
+_session_seen: set[str] = set()
 
 def load_corpus() -> list[dict]:
     global _corpus_cache
@@ -122,6 +131,7 @@ def search(query: str, top: int = 20, app: str = None, record_type: str = None) 
     return [r for _, r in results[:top]]
 
 def format_record(r: dict) -> str:
+    """Full multi-line format — use for deep-dive on top hits."""
     t = r.get("type")
     lines = []
     if t == "doctype":
@@ -150,6 +160,26 @@ def format_record(r: dict) -> str:
         for k, v in list(r.get("hooks",{}).items())[:10]:
             lines.append(f"  {k}: {str(v)[:80]}")
     return "\n".join(lines)
+
+
+def format_record_compact(r: dict) -> str:
+    """One-liner per record — ~70% fewer tokens. Use for initial broad scan."""
+    t = r.get("type")
+    if t == "doctype":
+        fields = [f["fieldname"] for f in r.get("fields", []) if f.get("fieldname")][:8]
+        return f"[doctype] {r['name']} ({r['app']}) fields:{','.join(fields)}"
+    if t == "controller":
+        methods = [m["name"] for m in r.get("methods", [])][:8]
+        return f"[ctrl] {r['controller']} ({r.get('source','')}) methods:{','.join(methods)}"
+    if t == "api":
+        args = ",".join(r.get("args", []))
+        return f"[api] {r['function']}({args}) {r.get('source','')}"
+    if t == "hot_file":
+        return f"[hot_file] {r['path']} ({r.get('language','')})"
+    if t == "hooks":
+        keys = list(r.get("hooks", {}).keys())[:5]
+        return f"[hooks] {r['app']} keys:{','.join(keys)}"
+    return f"[{t}] {r.get('name') or r.get('source', '')}"
 
 
 # ── Skills / prompts library ─────────────────────────────────────────────────
@@ -232,15 +262,53 @@ def run_mcp():
     )
 
     @mcp.tool()
-    def search_corpus(query: str, top: int = 20, app: str = "", record_type: str = "") -> str:
-        """Search corpus.jsonl for DocTypes, APIs, controllers, and hot files relevant to a task."""
+    def search_corpus(query: str, top: int = 10, app: str = "", record_type: str = "") -> str:
+        """Search corpus.jsonl for DocTypes, APIs, controllers relevant to a task. Returns full detail.
+        Prefer search_corpus_compact for broad scans and search_corpus_delta for follow-up searches."""
         results = search(query, top=top,
                          app=app or None,
                          record_type=record_type or None)
         if not results:
             return f"No results for: {query}"
+        _session_seen.update(r.get("source", "") for r in results)
         return f"# Corpus: '{query}' — {len(results)} results\n\n" + \
                "\n\n".join(format_record(r) for r in results)
+
+    @mcp.tool()
+    def search_corpus_compact(query: str, top: int = 15, app: str = "", record_type: str = "") -> str:
+        """Compact one-liner per record (~70% fewer tokens). Use for initial broad scan to identify
+        which DocTypes/controllers are relevant, then call search_corpus on specific names."""
+        results = search(query, top=top,
+                         app=app or None,
+                         record_type=record_type or None)
+        if not results:
+            return f"No results for: {query}"
+        _session_seen.update(r.get("source", "") for r in results)
+        lines = [format_record_compact(r) for r in results]
+        return f"# Corpus compact: '{query}' — {len(results)} results\n" + "\n".join(lines)
+
+    @mcp.tool()
+    def search_corpus_delta(query: str, top: int = 10, app: str = "", record_type: str = "") -> str:
+        """Like search_corpus but skips sources already returned this session (deduplication).
+        Use for follow-up searches to avoid re-sending context already in the conversation."""
+        results = search(query, top=top,
+                         app=app or None,
+                         record_type=record_type or None)
+        new_results = [r for r in results if r.get("source", "") not in _session_seen]
+        if not new_results:
+            seen_count = len(results) - len(new_results)
+            return f"No new results for: '{query}' (all {seen_count} matches already in session)"
+        _session_seen.update(r.get("source", "") for r in new_results)
+        return f"# Corpus delta: '{query}' — {len(new_results)} new results\n\n" + \
+               "\n\n".join(format_record(r) for r in new_results)
+
+    @mcp.tool()
+    def reset_session_cache() -> str:
+        """Clear the session deduplication cache. Call this when starting a new task
+        so delta searches return full results again."""
+        count = len(_session_seen)
+        _session_seen.clear()
+        return f"Session cache cleared ({count} sources removed)"
 
     @mcp.tool()
     def get_hot_file(path: str) -> str:
@@ -314,11 +382,26 @@ def run_http(port: int = 7070):
             qs     = parse_qs(parsed.query)
 
             if parsed.path == "/search":
-                query  = qs.get("q",[""])[0]
-                top    = int(qs.get("top",["20"])[0])
-                app    = qs.get("app",[""])[0] or None
-                rtype  = qs.get("type",[""])[0] or None
+                query   = qs.get("q",[""])[0]
+                top     = int(qs.get("top",["10"])[0])
+                app     = qs.get("app",[""])[0] or None
+                rtype   = qs.get("type",[""])[0] or None
+                compact = qs.get("compact",[""])[0] == "1"
+                delta   = qs.get("delta",[""])[0] == "1"
                 results = search(query, top=top, app=app, record_type=rtype)
+                if delta:
+                    results = [r for r in results if r.get("source","") not in _session_seen]
+                _session_seen.update(r.get("source","") for r in results)
+                if compact:
+                    lines = [format_record_compact(r) for r in results]
+                    body  = f"# Corpus: '{query}' — {len(results)} results\n" + "\n".join(lines)
+                    body  = body.encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain; charset=utf-8")
+                    self.send_header("Content-Length", len(body))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
                 self._json({"query": query, "count": len(results), "results": results})
 
             elif parsed.path == "/hot_file":
@@ -380,8 +463,10 @@ def run_http(port: int = 7070):
             else:
                 self._json({
                     "endpoints": [
-                        "/system-prompt          ← paste this into Codex/Antigravity/Gemini system prompt",
-                        "/search?q=&top=20&app=&type=",
+                        "/system-prompt                          ← paste into Codex/Antigravity/Gemini",
+                        "/search?q=&top=10&app=&type=",
+                        "/search?q=&compact=1                   ← one-liner per record (~70% fewer tokens)",
+                        "/search?q=&delta=1                     ← skip already-seen sources this session",
                         "/hot_file?path=",
                         "/doctypes?app=",
                         "/project_info",
